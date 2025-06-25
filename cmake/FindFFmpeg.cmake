@@ -22,12 +22,22 @@
 # Check FFmpeg version.
 # @todo: clean how to get current FFmpeg version.
 #
+set(FFMPEG_CUSTOM_PATH "/home/kqbi/install/ffmpeg" CACHE PATH "Custom path to FFmpeg installation")
+
 macro(check_ffmpeg_version)
-	exec_program("ffmpeg -version 2>&1 | grep 'ffmpeg version' | sed -e 's/ffmpeg\ version\ //'"
-		OUTPUT_VARIABLE FFmpeg_CURRENT_VERSION)
-	if(${FFmpeg_CURRENT_VERSION} LESS ${FFmpeg_FIND_VERSION})
-		message(SEND_ERROR "Your FFmpeg version is too old (${FFmpeg_CURRENT_VERSION} < ${FFmpeg_FIND_VERSION}).")
-	endif()
+    if(FFMPEG_CUSTOM_PATH)
+        # 使用自定义路径下的ffmpeg可执行文件检查版本
+        exec_program("${FFMPEG_CUSTOM_PATH}/bin/ffmpeg -version 2>&1 | grep 'ffmpeg version' | sed -e 's/ffmpeg\ version\ //'"
+            OUTPUT_VARIABLE FFmpeg_CURRENT_VERSION)
+    else()
+        # 使用系统路径的ffmpeg
+        exec_program("ffmpeg -version 2>&1 | grep 'ffmpeg version' | sed -e 's/ffmpeg\ version\ //'"
+            OUTPUT_VARIABLE FFmpeg_CURRENT_VERSION)
+    endif()
+    
+    if(${FFmpeg_CURRENT_VERSION} LESS ${FFmpeg_FIND_VERSION})
+        message(SEND_ERROR "Your FFmpeg version is too old (${FFmpeg_CURRENT_VERSION} < ${FFmpeg_FIND_VERSION}).")
+    endif()
 endmacro()
 
 
@@ -37,32 +47,38 @@ endmacro()
 # then looking up the libraries and include directories.
 #
 macro(find_component COMPONENT PKGCONFIG LIBRARY HEADER)
-	if(NOT WIN32)
-		# use pkg-config to get the directories
-		find_package(PkgConfig)
-		if(PKG_CONFIG_FOUND)
-			pkg_check_modules(PC_${COMPONENT} ${PKGCONFIG})
-		endif()
-		# find include
-		find_path(${COMPONENT}_INCLUDE_DIR
-			${HEADER}
-			HINTS ${PC_${COMPONENT}_INCLUDEDIR} ${PC_${COMPONENT}_INCLUDE_DIR}
-		)
-		# find lib
-		find_library(${COMPONENT}_LIBRARIES
-			NAMES ${LIBRARY}
-			HINTS ${PC_${COMPONENT}_LIBDIR} ${PC_${COMPONENT}_LIBRARY_DIRS}
-		)
-		# set definition and version
-		set(${COMPONENT}_DEFINITIONS ${PC_${COMPONENT}_CFLAGS_OTHER} CACHE STRING "The ${COMPONENT} CFLAGS.")
-		set(${COMPONENT}_VERSION ${PC_${COMPONENT}_VERSION} CACHE STRING "The ${COMPONENT} version number.")
-	else()
-		# find include
-		find_path(${COMPONENT}_INCLUDE_DIR ${HEADER})
-		# find lib
-		file(GLOB_RECURSE ${COMPONENT}_LIBRARIES "${CMAKE_PREFIX_PATH}/*${COMPONENT}.lib") 
-		# @todo: define definition and version
-	endif()
+ if(NOT WIN32)
+        # use pkg-config to get the directories
+        find_package(PkgConfig)
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(PC_${COMPONENT} ${PKGCONFIG})
+        endif()
+        # find include - 添加自定义路径搜索
+        find_path(${COMPONENT}_INCLUDE_DIR
+            ${HEADER}
+            HINTS ${FFMPEG_CUSTOM_PATH}/include ${PC_${COMPONENT}_INCLUDEDIR} ${PC_${COMPONENT}_INCLUDE_DIR}
+            PATH_SUFFIXES ffmpeg lib${COMPONENT}
+        )
+        # find lib - 添加自定义路径搜索
+        find_library(${COMPONENT}_LIBRARIES
+            NAMES ${LIBRARY}
+            HINTS ${FFMPEG_CUSTOM_PATH}/lib ${PC_${COMPONENT}_LIBDIR} ${PC_${COMPONENT}_LIBRARY_DIRS}
+        )
+        # set definition and version
+        set(${COMPONENT}_DEFINITIONS ${PC_${COMPONENT}_CFLAGS_OTHER} CACHE STRING "The ${COMPONENT} CFLAGS.")
+        set(${COMPONENT}_VERSION ${PC_${COMPONENT}_VERSION} CACHE STRING "The ${COMPONENT} version number.")
+    else()
+        # find include - 添加自定义路径搜索
+        find_path(${COMPONENT}_INCLUDE_DIR ${HEADER}
+            HINTS ${FFMPEG_CUSTOM_PATH}/include
+            PATH_SUFFIXES ffmpeg lib${COMPONENT}
+        )
+        # find lib - 添加自定义路径搜索
+        file(GLOB_RECURSE ${COMPONENT}_LIBRARIES 
+            "${FFMPEG_CUSTOM_PATH}/lib/*${COMPONENT}.lib"
+            "${CMAKE_PREFIX_PATH}/*${COMPONENT}.lib"
+        ) 
+    endif()
 
 	# Marks the given component as found if both *_LIBRARIES AND *_INCLUDE_DIR is present.
 	if(${COMPONENT}_LIBRARIES AND ${COMPONENT}_INCLUDE_DIR)
